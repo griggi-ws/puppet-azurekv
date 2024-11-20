@@ -59,6 +59,10 @@ module PuppetX
           JSON.parse(response.body)['access_token']
         end
 
+        def self.normalize_name(id:)
+          Puppet.debug '[AZUREKV]: normalize_name function started'
+        end
+
         def self.get_random_password(password_length: 32, exclude_characters: '\'";\\{}@', exclude_numbers: false, exclude_punctuation: false, exclude_uppercase: false, exclude_lowercase: false, include_space: false, require_each_included_type: true)
           Puppet.debug '[AZUREKV]: get_random_password function started'
           SecureRandom.send(:choose, [] - [], password_length)
