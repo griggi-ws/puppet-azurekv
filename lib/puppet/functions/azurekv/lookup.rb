@@ -5,15 +5,17 @@ begin
   require 'aws-sdk-core'
 rescue LoadError
   raise Puppet::DataBinding::LookupError,
-        '[azurekv]: Must install aws-sdk-secretsmanager gem on both agent and server ruby versions to use awssm_lookup'
+        '[azurekv]: Must install aws-sdk-secretsmanager gem on both agent and server ruby versions to use azurekv_lookup'
 end
 
 Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::InternalFunction) do
   dispatch :lookup do
     cache_param # Completely undocumented feature that I can only find implemented in a single official Puppet module? Sure why not let's try it
     param 'String', :id
-    optional_param 'String', :version
-    optional_param 'Optional[String]', :region
+    optional_param 'Optional[String]', :vault
+    optional_param 'Optional[String]', :version
+    optional_param 'Optional[String]', :api
+    optional_param 'Optional[String]', :api_version
     optional_param 'Optional[Number]', :cache_stale
     optional_param 'Optional[Boolean]', :ignore_cache
     optional_param 'Optional[Hash]', :create_options
@@ -23,7 +25,7 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
   # Allows for passing a hash of options to the vault_lookup::lookup() function.
   #
   # @example
-  #  $foo = awssm::lookup('secret/some/path/foo',
+  #  $foo = azurekv::lookup('secret/some/path/foo',
   #    { 'version' => 'AWSPREVIOUS', 'region' => 'us-east-1' }
   #  )
   #
@@ -35,10 +37,11 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
   end
 
   # Lookup with a path and an options hash. The use of undef/nil in positional parameters with a deferred call appears to not work, so we need this.
-  # Be sure to also update the default values in the awssm::lookup function, as those will be used in the case that an options hash is passed without
+  # Be sure to also update the default values in the azurekv::lookup function, as those will be used in the case that an options hash is passed without
   # all values defined.
-  def lookup_opts_hash(cache, id, options = { 'region' => nil,
-                                              'version' => 'AWSCURRENT',
+  def lookup_opts_hash(cache, id, options = { 'vault' => nil,
+                                              'api' => nil,
+                                              'version' => nil,
                                               'cache_stale' => 30,
                                               'ignore_cache' => false,
                                               'create_options' => {
@@ -53,19 +56,31 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
                                                 'require_each_included_type' => true
                                               } })
 
-    Puppet.debug '[AWSSM]: Looking up region to use'
-    vault_lookup = [closure_scope['facts']&.fetch('vault', nil)]
+    Puppet.debug '[AZUREKV]: Looking up vault to use'
+    vault_lookup = [closure_scope['facts']&.fetch('azurekv_vault', nil)]
     begin
-      hiera = call_function('lookup', 'vault', nil, nil, 'default')
+      hiera = call_function('lookup', 'azurekv_vault', nil, nil, 'default')
       vault_lookup.push(hiera)
     rescue StandardError => e
-      Puppet.debug "[AWSSM]: Puppet `lookup` function inaccessible, error #{e}"
+      Puppet.debug "[AZUREKV]: Puppet `lookup` function inaccessible, error #{e}"
     end
 
-    Puppet.debug "[AWSSM]: vault_lookup value is #{vault_lookup}"
+    Puppet.debug "[AZUREKV]: vault_lookup value is #{vault_lookup}"
+
+    Puppet.debug '[AZUREKV]: Looking up API to use'
+    api_lookup = [closure_scope['facts']&.fetch('azurekv_api', nil)]
+    begin
+      hiera = call_function('lookup', 'azurekv_api', nil, nil, 'vault.microsoft.net')
+      api_lookup.push(hiera)
+    rescue StandardError => e
+      Puppet.debug "[AZUREKV]: Puppet `lookup` function inaccessible, error #{e}"
+    end
+
+    Puppet.debug "[AZUREKV]: api_lookup value is #{api_lookup}"
 
     # Things we don't want to be `nil` if not passed in the initial call
-    options['region'] ||= vault_lookup.compact.first
+    options['api'] ||= api_lookup.compact.first
+    options['api_version'] ||= '7.5'
     options['cache_stale'] ||= 30
     options['ignore_cache'] ||= false
     # NOTE: The order of these options MUST be the same as the lookup()
@@ -73,14 +88,16 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
     # order of existing parameters change, those changes must also be made
     # here.
 
-    Puppet.debug "[AWSSM]: Calling lookup function in region #{options['region']}"
-    PuppetX::GRiggi::AWSSM::Lookup.lookup(cache:,
-                                          id:,
-                                          region: options['region'],
-                                          version: options['version'],
-                                          cache_stale: options['cache_stale'],
-                                          ignore_cache: options['ignore_cache'],
-                                          create_options: options['create_options'])
+    Puppet.debug "[AZUREKV]: Calling lookup function in vault #{options['vault']}"
+    PuppetX::GRiggi::AZUREKV::Lookup.lookup(cache: cache,
+                                            id: id,
+                                            vault: options['vault'],
+                                            version: options['version'],
+                                            api: options['api'],
+                                            api_version: options['api_version'],
+                                            cache_stale: options['cache_stale'],
+                                            ignore_cache: options['ignore_cache'],
+                                            create_options: options['create_options'])
   end
 
   # Lookup with a path and positional arguments.
@@ -89,8 +106,10 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
   # lookup_opts_hash().
   def lookup(cache,
              id,
-             region = nil,
+             vault = nil,
              version = nil,
+             api = 'vault.azure.net',
+             api_version = '7.5',
              cache_stale = 30,
              ignore_cache = false,
              create_options = {
@@ -104,37 +123,26 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
                'include_space' => false,
                'require_each_included_type' => true
              })
-
-    Puppet.debug '[AWSSM]: Looking up region to use'
-    vault_lookup = [closure_scope['trusted']&.fetch('extensions', nil)&.fetch('pp_region', nil),
-                     closure_scope['facts']&.fetch('region', nil)]
+    Puppet.debug '[AZUREKV]: Looking up vault to use'
+    vault_lookup = [closure_scope['facts']&.fetch('azurekv_vault', nil)]
     begin
-      hiera = call_function('lookup', 'region', nil, nil, 'us-east-2')
+      hiera = call_function('lookup', 'azurekv_vault', nil, nil, 'default')
       vault_lookup.push(hiera)
     rescue StandardError => e
-      Puppet.debug "[AWSSM]: Puppet `lookup` function inaccessible, error #{e}"
+      Puppet.debug "[AZUREKV]: Puppet `lookup` function inaccessible, error #{e}"
     end
-    begin
-      Puppet.debug '[AWSSM]: start EC2 metadata lookup'
-      ec2_metadata = Aws::EC2Metadata.new
-      host_region = ec2_metadata.get('/latest/meta-data/placement/region')
-      vault_lookup.unshift(host_region)
-      Puppet.debug "[AWSSM]: EC2 metadata lookup successful, host region #{host_region}"
-      Puppet.debug "[AWSSM]: vault_lookup new value: #{vault_lookup}"
-    rescue StandardError => e
-      Puppet.debug "[AWSSM]: EC2 metadata inaccessible, error #{e}"
-    end
+    Puppet.debug "[AZUREKV]: vault_lookup value is #{vault_lookup}"
+    vault ||= vault_lookup.compact.first
+    Puppet.debug "[AZUREKV]: Calling lookup function in vault #{vault}"
 
-    Puppet.debug "[AWSSM]: vault_lookup value is #{vault_lookup}"
-    region ||= vault_lookup.compact.first
-    Puppet.debug "[AWSSM]: Calling lookup function in region #{region}"
-
-    PuppetX::GRiggi::AWSSM::Lookup.lookup(cache:,
-                                          id:,
-                                          region:,
-                                          version:,
-                                          cache_stale:,
-                                          ignore_cache:,
-                                          create_options:)
+    PuppetX::GRiggi::AZUREKV::Lookup.lookup(cache: cache,
+                                            id: id,
+                                            vault: vault,
+                                            version: version,
+                                            api: api,
+                                            api_version: api_version,
+                                            cache_stale: cache_stale,
+                                            ignore_cache: ignore_cache,
+                                            create_options: create_options)
   end
 end
