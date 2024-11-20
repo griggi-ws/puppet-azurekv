@@ -13,6 +13,7 @@ module PuppetX
       class Lookup
         def self.lookup(cache:, id:, vault:, version: nil, api: 'vault.azure.net', api_version: '7.5', cache_stale: 30, ignore_cache: false, create_options: {})
           Puppet.debug '[AZUREKV]: Lookup function started'
+          id = normalize_name(id: id)
           cache_key = [id, version, region]
           cache_hash = cache.retrieve(self)
           cached_result = cache_hash[cache_key] unless ignore_cache
@@ -59,13 +60,21 @@ module PuppetX
           JSON.parse(response.body)['access_token']
         end
 
-        def self.normalize_name(id:)
+        def self.normalize_name(id:, sub: '-')
           Puppet.debug '[AZUREKV]: normalize_name function started'
+          id.gsub(/[^a-zA-Z0-9]/, sub)
         end
 
         def self.get_random_password(password_length: 32, exclude_characters: '\'";\\{}@', exclude_numbers: false, exclude_punctuation: false, exclude_uppercase: false, exclude_lowercase: false, include_space: false, require_each_included_type: true)
           Puppet.debug '[AZUREKV]: get_random_password function started'
-          SecureRandom.send(:choose, [] - [], password_length)
+          inclusions = [*'A'..'Z', *'a'..'z', *'0'..'9']
+          exclusions = [exclude_characters.chars]
+          exclusions.push(*'0'..'9') if exclude_numbers
+          exclusions.push('!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'.chars) if exclude_punctuation
+          exclusions.push(*'A'..'Z') if exclude_uppercase
+          exclusions.push(*'a'..'z') if exclude_lowercase
+          SecureRandom.send(:choose, inclusions - exclusions,
+                            password_length)
         end
 
         def self.create_secret(id:, vault:, api:, api_version:, options: {})
