@@ -62,8 +62,7 @@ module PuppetX
 
         def self.normalize_name(id:, sub: '-')
           Puppet.debug '[AZUREKV]: normalize_name function started'
-          id.gsub(%r{/}, '--')
-          id.gsub(/[^a-zA-Z0-9]/, sub)
+          id.gsub('/', '--').gsub(/[^a-zA-Z0-9-]/, sub)
         end
 
         def self.get_random_password(password_length: 32, exclude_characters: '\'";\\{}@', exclude_numbers: false, exclude_punctuation: false, exclude_uppercase: false, exclude_lowercase: false, include_space: false, require_each_included_type: true)
