@@ -62,6 +62,7 @@ module PuppetX
 
         def self.normalize_name(id:, sub: '-')
           Puppet.debug '[AZUREKV]: normalize_name function started'
+          id.gsub(%r{/}, '--')
           id.gsub(/[^a-zA-Z0-9]/, sub)
         end
 
