@@ -82,7 +82,7 @@ module PuppetX
           Puppet.debug '[AZUREKV]: create_secret function started'
           uri = URI("https://#{vault}.#{api}/secrets/#{id}?api-version=#{api_version}")
           request = Net::HTTP::Put.new(uri.request_uri)
-          request['Authorization'] = "Bearer #{get_token_msi}"
+          request['Authorization'] = "Bearer #{get_token_msi(api: api)}"
           request['Content-Type'] = 'application/json'
           secret = get_random_password({
                                          password_length: options['password_length'] || 32,
@@ -117,7 +117,7 @@ module PuppetX
           response = nil
           uri = URI("https://#{vault}.#{api}/secrets/#{id}/#{version}?api-version=#{api_version}")
           request = Net::HTTP::Get.new(uri.request_uri)
-          request['Authorization'] = "Bearer #{get_token_msi}"
+          request['Authorization'] = "Bearer #{get_token_msi(api: api)}"
           begin
             response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |http|
               http.request(request)
