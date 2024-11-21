@@ -14,7 +14,7 @@ module PuppetX
         def self.lookup(cache:, id:, vault:, version: nil, api: 'vault.azure.net', api_version: '7.5', cache_stale: 30, ignore_cache: false, create_options: {})
           Puppet.debug '[AZUREKV]: Lookup function started'
           id = normalize_name(id: id)
-          cache_key = [id, version, region]
+          cache_key = [id, version, vault]
           cache_hash = cache.retrieve(self)
           cached_result = cache_hash[cache_key] unless ignore_cache
           cache_use = false
@@ -44,7 +44,7 @@ module PuppetX
             cache_hash[cache_key] = to_cache
             Puppet.debug '[AZUREKV]: New value stored in cache'
           end
-          Puppet.info "[AZUREKV]: Successfully looked up value of #{id} in region #{region} (cache hit: #{cache_use})"
+          Puppet.info "[AZUREKV]: Successfully looked up value of #{id} in vault #{vault} (cache hit: #{cache_use})"
           result
         end
 
