@@ -102,7 +102,7 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
              id,
              vault = nil,
              version = nil,
-             api = 'vault.azure.net',
+             api = nil,
              api_version = '7.5',
              cache_stale = 30,
              ignore_cache = false,
