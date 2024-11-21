@@ -123,13 +123,16 @@ module PuppetX
               http.request(request)
             end
             response.value
-          rescue Net::HTTPNotFound
-            unless create_options['create_missing']
-              raise Puppet::Error,
-                    "[AZUREKV]: No matching key #{id} + version #{version} found, and creating a missing secret is not enabled."
+          rescue Net::HTTPError
+            if response.is_a?(Net::HTTPNotFound)
+              unless create_options['create_missing']
+                raise Puppet::Error,
+                      "[AZUREKV]: No matching key #{id} + version #{version} found, and creating a missing secret is not enabled."
+              end
+              # this can be changed to omit keyword argument repetition with ruby 3.1, so dropping puppet <=7 support.
+              return create_secret(id: id, options: create_options, vault: vault, api: api, api_version: api_version)
             end
-            # this can be changed to omit keyword argument repetition with ruby 3.1, so dropping puppet <=7 support.
-            return create_secret(id: id, options: create_options, vault: vault, api: api, api_version: api_version)
+            raise Puppet::Error, "[AZUREKV]: Non-specific error when looking up #{id}: #{response.body}"
           end
           unless response.is_a?(Net::HTTPSuccess)
             raise Puppet::Error, "[AZUREKV]: Non-specific error when looking up #{id}: #{response.body}"
