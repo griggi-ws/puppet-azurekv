@@ -68,10 +68,11 @@ module PuppetX
 
         def self.get_random_password(password_length: 32, exclude_characters: '\'";\\{}@', exclude_numbers: false, exclude_punctuation: false, exclude_uppercase: false, exclude_lowercase: false, include_space: false, require_each_included_type: true)
           Puppet.debug '[AZUREKV]: get_random_password function started'
-          inclusions = [*'A'..'Z', *'a'..'z', *'0'..'9']
+          symbols = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'
+          inclusions = [*'A'..'Z', *'a'..'z', *'0'..'9', *symbols.chars]
           exclusions = [exclude_characters.chars]
           exclusions.push(*'0'..'9') if exclude_numbers
-          exclusions.push('!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'.chars) if exclude_punctuation
+          exclusions.push(symbols.chars) if exclude_punctuation
           exclusions.push(*'A'..'Z') if exclude_uppercase
           exclusions.push(*'a'..'z') if exclude_lowercase
           SecureRandom.send(:choose, inclusions - exclusions,
