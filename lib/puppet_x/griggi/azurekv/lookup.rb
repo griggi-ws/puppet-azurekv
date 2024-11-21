@@ -123,8 +123,7 @@ module PuppetX
               http.request(request)
             end
             response.value
-          rescue StandardError => e
-            Puppet.debug "[AZUREKV]: Error when looking up #{id}: #{e} of type #{e.class})"
+          rescue Net::HTTPServerException
             if response.is_a?(Net::HTTPNotFound)
               unless create_options['create_missing']
                 raise Puppet::Error,
