@@ -82,7 +82,7 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
     # order of existing parameters change, those changes must also be made
     # here.
 
-    Puppet.debug "[AZUREKV]: Calling lookup function in vault #{options['vault']}"
+    Puppet.debug "[AZUREKV]: Calling lookup function in vault #{options['vault']} using api #{options['api']}"
     PuppetX::GRiggi::AZUREKV::Lookup.lookup(cache: cache,
                                             id: id,
                                             vault: options['vault'],
@@ -126,8 +126,21 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
       Puppet.debug "[AZUREKV]: Puppet `lookup` function inaccessible, error #{e}"
     end
     Puppet.debug "[AZUREKV]: vault_lookup value is #{vault_lookup}"
+
+    Puppet.debug '[AZUREKV]: Looking up API to use'
+    api_lookup = [closure_scope['facts']&.fetch('azurekv_api', nil)]
+    begin
+      hiera = call_function('lookup', 'azurekv_api', nil, nil, 'vault.microsoft.net')
+      api_lookup.push(hiera)
+    rescue StandardError => e
+      Puppet.debug "[AZUREKV]: Puppet `lookup` function inaccessible, error #{e}"
+    end
+
+    Puppet.debug "[AZUREKV]: api_lookup value is #{api_lookup}"
+
     vault ||= vault_lookup.compact.first
-    Puppet.debug "[AZUREKV]: Calling lookup function in vault #{vault}"
+    api ||= api_lookup.compact.first
+    Puppet.debug "[AZUREKV]: Calling lookup function in vault #{vault} using api #{api}"
 
     PuppetX::GRiggi::AZUREKV::Lookup.lookup(cache: cache,
                                             id: id,
