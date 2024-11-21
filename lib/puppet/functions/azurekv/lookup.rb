@@ -1,12 +1,6 @@
 # frozen_string_literal: true
 
 require_relative '../../../puppet_x/griggi/azurekv/lookup'
-begin
-  require 'aws-sdk-core'
-rescue LoadError
-  raise Puppet::DataBinding::LookupError,
-        '[azurekv]: Must install aws-sdk-secretsmanager gem on both agent and server ruby versions to use azurekv_lookup'
-end
 
 Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::InternalFunction) do
   dispatch :lookup do
