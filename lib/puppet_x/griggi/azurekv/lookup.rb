@@ -122,6 +122,7 @@ module PuppetX
             response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |http|
               http.request(request)
             end
+            response.value
           rescue Net::HTTPNotFound
             unless create_options['create_missing']
               raise Puppet::Error,
