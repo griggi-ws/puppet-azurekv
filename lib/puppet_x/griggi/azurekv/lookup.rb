@@ -138,8 +138,8 @@ module PuppetX
             raise Puppet::Error, "[AZUREKV]: Non-specific error when looking up #{id}: #{response.body}"
           end
 
-          Puppet.debug "[AZUREKV]: Response received: #{response.body}."
-          secret = JSON.parse(response.body['value'])
+          Puppet.debug '[AZUREKV]: Response received.'
+          secret = JSON.parse(response.body)['value']
           Puppet.debug '[AZUREKV]: Returning secret as sensitive.'
           Puppet::Pops::Types::PSensitiveType::Sensitive.new(secret)
         end
