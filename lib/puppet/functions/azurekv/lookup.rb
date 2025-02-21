@@ -73,6 +73,7 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
     Puppet.debug "[AZUREKV]: api_lookup value is #{api_lookup}"
 
     # Things we don't want to be `nil` if not passed in the initial call
+    options['vault'] ||= vault_lookup.compact.first
     options['api'] ||= api_lookup.compact.first
     options['api_version'] ||= '7.5'
     options['cache_stale'] ||= 30
