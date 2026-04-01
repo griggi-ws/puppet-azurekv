@@ -11,23 +11,17 @@ module PuppetX
     module AZUREKV
       # First module for AZUREKV, to lookup a given key (and optionally version)
       class Lookup
-        def self.lookup(cache:, id:, vault:, version: nil, api: 'vault.azure.net', api_version: '7.5', cache_stale: 30, ignore_cache: false, create_options: {})
+        def self.lookup(cache:, id:, vault:, version: nil, api: 'vault.azure.net', api_version: '7.5',
+                        ignore_cache: false, create_options: {})
           Puppet.debug '[AZUREKV]: Lookup function started'
           id = normalize_name(id: id)
           cache_key = [id, version, vault]
           cache_hash = cache.retrieve(self)
           cached_result = cache_hash[cache_key] unless ignore_cache
-          cache_use = false
           if cached_result
-            # ! Not currently working as expected, cache behavior is not documented and the only usage I found is in Puppet's Hashicorp Vault module
-            # https://github.com/voxpupuli/puppet-vault_lookup/pull/65
-            # https://tickets.puppetlabs.com/browse/PUP-8676
-            if (cached_result['date'] <=> Time.now - (cache_stale * 60)) == 1
-              Puppet.debug '[AZUREKV]: Returning cached value that is still fresh'
-              cache_use = true
-              return cached_result['data']
-            end
-            Puppet.debug '[AZUREKV]: Cached value is stale, fetching new one'
+            Puppet.debug '[AZUREKV]: Returning cached value'
+            Puppet.info "[AZUREKV]: Successfully looked up value of #{id} in vault #{vault} (cache hit: true)"
+            return cached_result
           end
           result = get_secret(id: id,
                               version: version,
@@ -36,15 +30,8 @@ module PuppetX
                               api_version: api_version,
                               create_options: create_options)
           Puppet.debug '[AZUREKV]: Sensitive secret returned.'
-          to_cache = {
-            data: result,
-            date: Time.now
-          }
-          if cache_use
-            cache_hash[cache_key] = to_cache
-            Puppet.debug '[AZUREKV]: New value stored in cache'
-          end
-          Puppet.info "[AZUREKV]: Successfully looked up value of #{id} in vault #{vault} (cache hit: #{cache_use})"
+          cache_hash[cache_key] = result
+          Puppet.info "[AZUREKV]: Successfully looked up value of #{id} in vault #{vault} (cache hit: false)"
           result
         end
 
@@ -65,7 +52,8 @@ module PuppetX
           id.gsub('/', sub + sub).gsub(/[^a-zA-Z0-9-]/, sub)
         end
 
-        def self.get_random_password(password_length: 32, exclude_characters: '\'";\\{}@', exclude_numbers: false, exclude_punctuation: false, exclude_uppercase: false, exclude_lowercase: false, include_space: false, require_each_included_type: true)
+        def self.get_random_password(password_length: 32, exclude_characters: '\'";\\{}@', exclude_numbers: false,
+                                     exclude_punctuation: false, exclude_uppercase: false, exclude_lowercase: false, include_space: false, require_each_included_type: true)
           Puppet.debug '[AZUREKV]: get_random_password function started'
           symbols = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'
           inclusions = [*'A'..'Z', *'a'..'z', *'0'..'9', *symbols.chars]

@@ -10,7 +10,6 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
     optional_param 'Optional[String]', :version
     optional_param 'Optional[String]', :api
     optional_param 'Optional[String]', :api_version
-    optional_param 'Optional[Number]', :cache_stale
     optional_param 'Optional[Boolean]', :ignore_cache
     optional_param 'Optional[Hash]', :create_options
     return_type 'Sensitive'
@@ -36,7 +35,6 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
   def lookup_opts_hash(cache, id, options = { 'vault' => nil,
                                               'api' => nil,
                                               'version' => nil,
-                                              'cache_stale' => 30,
                                               'ignore_cache' => false,
                                               'create_options' => {
                                                 'create_missing' => true,
@@ -49,7 +47,6 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
                                                 'include_space' => false,
                                                 'require_each_included_type' => true
                                               } })
-
     Puppet.debug '[AZUREKV]: Looking up vault to use'
     vault_lookup = [closure_scope['facts']&.fetch('azurekv_vault', nil)]
     begin
@@ -76,7 +73,6 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
     options['vault'] ||= vault_lookup.compact.first
     options['api'] ||= api_lookup.compact.first
     options['api_version'] ||= '7.5'
-    options['cache_stale'] ||= 30
     options['ignore_cache'] ||= false
     # NOTE: The order of these options MUST be the same as the lookup()
     # function's signature. If new parameters are added to lookup(), or if the
@@ -90,7 +86,6 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
                                             version: options['version'],
                                             api: options['api'],
                                             api_version: options['api_version'],
-                                            cache_stale: options['cache_stale'],
                                             ignore_cache: options['ignore_cache'],
                                             create_options: options['create_options'])
   end
@@ -105,7 +100,6 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
              version = nil,
              api = nil,
              api_version = '7.5',
-             cache_stale = 30,
              ignore_cache = false,
              create_options = {
                'create_missing' => true,
@@ -149,7 +143,6 @@ Puppet::Functions.create_function(:'azurekv::lookup', Puppet::Functions::Interna
                                             version: version,
                                             api: api,
                                             api_version: api_version,
-                                            cache_stale: cache_stale,
                                             ignore_cache: ignore_cache,
                                             create_options: create_options)
   end
