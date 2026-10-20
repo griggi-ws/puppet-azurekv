@@ -70,7 +70,7 @@ describe PuppetX::GRiggi::AZUREKV::Lookup do
         )
 
         # Verify the secret was stored in cache
-        cache_key = [secret_id, nil, vault]
+        cache_key = [secret_id, nil, vault, api]
         expect(cache_hash[cache_key]).not_to be_nil
         expect(cache_hash[cache_key].unwrap).to eq(secret_value)
       end
@@ -129,7 +129,7 @@ describe PuppetX::GRiggi::AZUREKV::Lookup do
       let(:cached_data) { Puppet::Pops::Types::PSensitiveType::Sensitive.new(secret_value) }
 
       before(:each) do
-        cache_hash[[secret_id, nil, vault]] = cached_data
+        cache_hash[[secret_id, nil, vault, api]] = cached_data
       end
 
       it 'returns cached value without calling Azure' do
@@ -147,11 +147,37 @@ describe PuppetX::GRiggi::AZUREKV::Lookup do
       end
     end
 
+    context 'when the same vault name is cached under a different api' do
+      before(:each) do
+        cache_hash[[secret_id, nil, vault, 'vault.usgovcloudapi.net']] =
+          Puppet::Pops::Types::PSensitiveType::Sensitive.new('gov-cloud-value')
+      end
+
+      it 'does not return the other api\'s cached value' do
+        allow(http_response).to receive(:body).and_return({ 'value' => secret_value }.to_json)
+        allow(http_response).to receive(:is_a?).with(Net::HTTPSuccess).and_return(true)
+        allow(http_response).to receive(:value).and_return(nil)
+        vault_http = double('vault_http')
+        allow(vault_http).to receive(:request).and_return(http_response)
+        allow(Net::HTTP).to receive(:start).with("#{vault}.#{api}", 443, use_ssl: true).and_yield(vault_http)
+
+        result = described_class.lookup(
+          cache: cache,
+          id: secret_id,
+          vault: vault,
+          api: api,
+          api_version: api_version
+        )
+
+        expect(result.unwrap).to eq(secret_value)
+      end
+    end
+
     context 'when ignore_cache is true' do
       let(:cached_data) { Puppet::Pops::Types::PSensitiveType::Sensitive.new('cached-value') }
 
       before(:each) do
-        cache_hash[[secret_id, nil, vault]] = cached_data
+        cache_hash[[secret_id, nil, vault, api]] = cached_data
       end
 
       it 'fetches value from Azure even when cache exists' do
@@ -226,7 +252,7 @@ describe PuppetX::GRiggi::AZUREKV::Lookup do
               vault: vault,
               api: api,
               api_version: api_version,
-              create_options: {}
+              create_options: { 'create_missing' => false }
             )
           end.to raise_error(Puppet::Error, /No matching key.*and creating a missing secret is not enabled/)
         end
@@ -399,6 +425,77 @@ describe PuppetX::GRiggi::AZUREKV::Lookup do
           )
         end.to raise_error(Puppet::Error, /Error when creating/)
       end
+    end
+  end
+
+  describe '.merge_create_options' do
+    it 'returns the defaults when given nil' do
+      expect(described_class.merge_create_options(nil)).to eq(described_class::DEFAULT_CREATE_OPTIONS)
+    end
+
+    it 'keeps defaults for keys missing from a partial hash' do
+      merged = described_class.merge_create_options('exclude_punctuation' => true)
+      expect(merged['exclude_punctuation']).to be(true)
+      expect(merged['create_missing']).to be(true)
+      expect(merged['password_length']).to eq(32)
+    end
+
+    it 'falls back to the default for nil values' do
+      expect(described_class.merge_create_options('password_length' => nil)['password_length']).to eq(32)
+    end
+
+    it 'respects explicit false values' do
+      merged = described_class.merge_create_options('create_missing' => false, 'require_each_included_type' => false)
+      expect(merged['create_missing']).to be(false)
+      expect(merged['require_each_included_type']).to be(false)
+    end
+  end
+
+  describe '.lookup with a partial create_options hash' do
+    it 'creates a missing secret, since create_missing defaults to true' do
+      not_found_response = double('not_found_response', body: 'Not Found')
+      allow(not_found_response).to receive(:is_a?).with(Net::HTTPNotFound).and_return(true)
+      allow(not_found_response).to receive(:value).and_raise(Net::HTTPServerException.new('404', not_found_response))
+      expect(described_class).to receive(:create_secret)
+        .with(hash_including(options: hash_including('create_missing' => true,
+                                                     'exclude_punctuation' => true,
+                                                     'password_length' => 32)))
+        .and_return(Puppet::Pops::Types::PSensitiveType::Sensitive.new(secret_value))
+
+      vault_http = double('vault_http')
+      allow(vault_http).to receive(:request).and_return(not_found_response)
+      allow(Net::HTTP).to receive(:start).with("#{vault}.#{api}", 443, use_ssl: true).and_yield(vault_http)
+
+      result = described_class.lookup(
+        cache: cache,
+        id: secret_id,
+        vault: vault,
+        api: api,
+        api_version: api_version,
+        create_options: { 'exclude_punctuation' => true }
+      )
+
+      expect(result.unwrap).to eq(secret_value)
+    end
+  end
+
+  describe '.create_secret without stubbing get_random_password' do
+    it 'generates a password using the merged options' do
+      create_response = double('create_response')
+      allow(create_response).to receive(:is_a?).with(Net::HTTPSuccess).and_return(true)
+      vault_http = double('vault_http')
+      allow(vault_http).to receive(:request).and_return(create_response)
+      allow(Net::HTTP).to receive(:start).with("#{vault}.#{api}", 443, use_ssl: true).and_yield(vault_http)
+
+      result = described_class.create_secret(
+        id: secret_id,
+        vault: vault,
+        api: api,
+        api_version: api_version,
+        options: { 'password_length' => 20, 'exclude_punctuation' => true }
+      )
+
+      expect(result.unwrap).to match(/\A[A-Za-z0-9]{20}\z/)
     end
   end
 
